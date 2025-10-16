@@ -1,0 +1,74 @@
+pipeline {
+  agent any
+  environment {
+    IMAGE_NAME = "globe-app"
+    CONTAINER_NAME = "globe-running"
+    BACKUP_IMAGE = "globe-app:backup"
+    COMPOSE_FILE = "docker-compose.yml"
+  }
+  stages {
+    stage('Clone Repository') {
+      steps {
+        git branch: 'master', url: 'https://github.com/Bharath-Bhandaru/restapi-proj.git'
+      }
+    }
+    
+    stage('Cleanup Previous Deployment') {
+      steps {
+        script {
+          // Force remove any existing containers and networks
+          sh """
+            docker stop ${CONTAINER_NAME} || true
+            docker rm -f ${CONTAINER_NAME} || true
+            docker stop mongo || true
+            docker rm -f mongo || true
+            docker network rm auto-deploy_default || true
+          """
+        }
+      }
+    }
+    
+    stage('Backup Current Deployment') {
+      steps {
+        script {
+          sh "docker tag ${IMAGE_NAME} ${BACKUP_IMAGE} || true"
+        }
+      }
+    }
+    
+    stage('Build and Test') {
+      steps {
+        sh 'docker-compose -f ${COMPOSE_FILE} build --no-cache'
+      }
+    }
+    
+    stage('Deploy') {
+      steps {
+        sh """
+          docker-compose -f ${COMPOSE_FILE} down || true
+          docker-compose -f ${COMPOSE_FILE} up -d --remove-orphans
+        """
+      }
+    }
+  }
+  post {
+    success {
+      echo "✅ Deployment successful!"
+      archiveArtifacts artifacts: '*/.log', allowEmptyArchive: true
+    }
+    failure {
+      echo "❌ Build or deployment failed. Rolling back..."
+      script {
+        sh """
+          docker-compose -f ${COMPOSE_FILE} down || true
+          docker stop ${CONTAINER_NAME} || true
+          docker rm -f ${CONTAINER_NAME} || true
+          docker stop mongo || true
+          docker rm -f mongo || true
+          docker network rm auto-deploy_default || true
+          docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${BACKUP_IMAGE} || true
+        """
+      }
+    }
+  }
+}
