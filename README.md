@@ -1,12 +1,28 @@
 # restapi-proj
 git clone <git url>
+
+
 cd Rest-api-Final-Project
+
+
 Rest-api-Final-Project/: npm install
+
+
 :cd my-globe-app
-Rest-api-Final-Project/my-globe-app/; npm install
+
+
+Rest-api-Final-Project/my-globe-app/: npm install
+
+
 Rest-api-Final-Project/my-globe-app/: npm run build
+
+
 cd ..
+
+
 Rest-api-Final-Project/npm run dev
+
+
 
 http://localhost:5000
 Open your app → click 🌍 Open Map
