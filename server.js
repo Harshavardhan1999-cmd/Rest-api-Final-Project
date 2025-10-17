@@ -14,7 +14,6 @@ const corsOptions = {
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   allowedHeaders: "Content-Type,Authorization",
 };
-
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
@@ -35,23 +34,37 @@ const locationSchema = new mongoose.Schema({
 
 const Location = mongoose.model("Location", locationSchema);
 
-// ✅ API ROUTES (these must come before static serving)
-app.post("/api/add-location", async (req, res) => {
+//
+// 🧩 CRUD API ROUTES
+//
+
+// 🟢 CREATE
+app.post("/api/locations", async (req, res) => {
   try {
     const { name, latitude, longitude, landmark, zipCode } = req.body;
-    const existingLocation = await Location.findOne({ name });
-    if (existingLocation) {
+    if (!name || !latitude || !longitude)
+      return res.status(400).json({ message: "⚠️ Name, latitude, and longitude are required." });
+
+    const existingLocation = await Location.findOne({ name: name.toLowerCase() });
+    if (existingLocation)
       return res.status(400).json({ message: "⚠️ Location with this name already exists." });
-    }
-    const newLocation = new Location({ name, latitude, longitude, landmark, zipCode });
+
+    const newLocation = new Location({
+      name: name.toLowerCase(),
+      latitude,
+      longitude,
+      landmark,
+      zipCode,
+    });
     await newLocation.save();
-    res.status(201).json({ message: "✅ Location added successfully!" });
+    res.status(201).json({ message: "✅ Location added successfully!", data: newLocation });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "❌ Server error" });
   }
 });
 
+// 🟡 READ — Get all locations
 app.get("/api/locations", async (req, res) => {
   try {
     const locations = await Location.find();
@@ -62,13 +75,12 @@ app.get("/api/locations", async (req, res) => {
   }
 });
 
-app.get("/api/search-location", async (req, res) => {
+// 🟡 READ — Search location by name
+app.get("/api/locations/search", async (req, res) => {
   try {
     const { name } = req.query;
-    const location = await Location.findOne({ name });
-    if (!location) {
-      return res.status(404).json({ message: "⚠️ Location not found" });
-    }
+    const location = await Location.findOne({ name: name.toLowerCase() });
+    if (!location) return res.status(404).json({ message: "⚠️ Location not found" });
     res.status(200).json(location);
   } catch (error) {
     console.error(error);
@@ -76,14 +88,52 @@ app.get("/api/search-location", async (req, res) => {
   }
 });
 
-app.post("/api/distance", async (req, res) => {
+// 🟠 UPDATE — Modify existing location
+app.put("/api/locations/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const updatedLocation = await Location.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedLocation)
+      return res.status(404).json({ message: "⚠️ Location not found" });
+
+    res.status(200).json({ message: "✅ Location updated successfully!", data: updatedLocation });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "❌ Server error" });
+  }
+});
+
+// 🔴 DELETE — Remove a location
+app.delete("/api/locations/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedLocation = await Location.findByIdAndDelete(id);
+    if (!deletedLocation)
+      return res.status(404).json({ message: "⚠️ Location not found" });
+
+    res.status(200).json({ message: "✅ Location deleted successfully!" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "❌ Server error" });
+  }
+});
+
+//
+// 📏 EXTRA — Distance Calculation API
+//
+app.post("/api/locations/distance", async (req, res) => {
   try {
     const { location1, location2 } = req.body;
     const loc1 = await Location.findOne({ name: location1.toLowerCase() });
     const loc2 = await Location.findOne({ name: location2.toLowerCase() });
-    if (!loc1 || !loc2) {
+    if (!loc1 || !loc2)
       return res.status(404).json({ message: "⚠️ One or both locations not found" });
-    }
 
     const distanceInMeters = geolib.getDistance(
       { latitude: loc1.latitude, longitude: loc1.longitude },
@@ -102,14 +152,16 @@ app.post("/api/distance", async (req, res) => {
   }
 });
 
-// ✅ Only after all APIs — serve the frontend
+//
+// ⚙️ Serve Frontend (After APIs)
+//
 app.use(express.static(path.join(__dirname, "my-globe-app/dist")));
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "my-globe-app/dist/index.html"));
 });
 
-// ✅ Start Server
+//
+// 🚀 Start Server
+//
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running on port ${PORT}`));
